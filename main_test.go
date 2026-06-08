@@ -17,8 +17,8 @@ func TestExportSampleRepositoryToEncryptedZip(t *testing.T) {
 	}
 
 	outPath := filepath.Join(t.TempDir(), "sample.zip")
-	const password = "svn12345"
-	if err := run([]string{"svn-fucker", "-zip", "--password", password, repoPath, outPath}); err != nil {
+	const explicitPassword = "test-password"
+	if err := run([]string{"svn-fucker", "-zip", "--password", explicitPassword, repoPath, outPath}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -40,7 +40,7 @@ func TestExportSampleRepositoryToEncryptedZip(t *testing.T) {
 		if !file.IsEncrypted() {
 			t.Fatalf("%s is not encrypted", file.Name)
 		}
-		file.SetPassword(password)
+		file.SetPassword(explicitPassword)
 		rc, err := file.Open()
 		if err != nil {
 			t.Fatalf("open encrypted file %s: %v", file.Name, err)
