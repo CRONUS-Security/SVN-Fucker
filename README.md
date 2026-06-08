@@ -1,20 +1,30 @@
-# SVN Export Zipper
+# SVN Exporter
 
-Pure CLI tool for exporting the latest revision from an FSFS SVN repository and writing a password-protected zip.
+Pure CLI tool for exporting the latest revision from an FSFS SVN repository into a directory or zip file.
 
 ## Usage
 
+Checkout/export the latest revision into a directory:
+
 ```powershell
-svn-fucker.exe ./test/psso ./test.zip
+svn-fucker.exe ./test/psso ./out
 ```
 
-The zip password is fixed to:
+Write the export into a zip file:
 
-```text
-svn12345
+```powershell
+svn-fucker.exe -zip ./test/psso ./test.zip
 ```
 
-The tool reads the repository directly, writes exported files into a temporary directory, creates the zip, and removes the temporary directory before exiting.
+Add a zip password:
+
+```powershell
+svn-fucker.exe -zip --password "svn12345" ./test/psso ./test.zip
+```
+
+Zip files are not password-protected unless `--password` is provided. If `-zip` is used, the destination must be a file path, not an existing directory.
+
+The tool reads the repository directly. Directory exports write files to the destination directory. Zip exports write exported files into a temporary directory, create the zip, and remove the temporary directory before exiting.
 
 ## Build
 

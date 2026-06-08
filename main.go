@@ -15,7 +15,13 @@ import (
 	azip "github.com/yeka/zip"
 )
 
-const zipPassword = "svn12345"
+type runOptions struct {
+	source      string
+	dest        string
+	zip         bool
+	password    string
+	passwordSet bool
+}
 
 func main() {
 	if err := run(os.Args); err != nil {
@@ -25,22 +31,41 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) != 3 {
-		return fmt.Errorf("usage: %s <svn-repository-path> <output.zip>", filepath.Base(args[0]))
+	opts, err := parseArgs(args)
+	if err != nil {
+		return err
 	}
 
-	repoPath, err := filepath.Abs(args[1])
+	repoPath, err := filepath.Abs(opts.source)
 	if err != nil {
 		return err
 	}
-	outPath, err := filepath.Abs(args[2])
+	outPath, err := filepath.Abs(opts.dest)
 	if err != nil {
 		return err
+	}
+	if opts.passwordSet && !opts.zip {
+		return errors.New("--password requires -zip")
+	}
+	if opts.zip {
+		if info, err := os.Stat(outPath); err == nil && info.IsDir() {
+			return fmt.Errorf("zip output path must be a file, got directory: %s", outPath)
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 
 	repo, err := OpenRepo(repoPath)
 	if err != nil {
 		return err
+	}
+
+	if !opts.zip {
+		if err := repo.ExportLatest(outPath); err != nil {
+			return err
+		}
+		fmt.Printf("checked out r%d to %s\n", repo.LatestRevision, outPath)
+		return nil
 	}
 
 	tmpDir, err := os.MkdirTemp("", "svn-export-*")
@@ -52,12 +77,49 @@ func run(args []string) error {
 	if err := repo.ExportLatest(tmpDir); err != nil {
 		return err
 	}
-	if err := zipDir(tmpDir, outPath, zipPassword); err != nil {
+	if err := zipDir(tmpDir, outPath, opts.password); err != nil {
 		return err
 	}
 
 	fmt.Printf("exported r%d to %s\n", repo.LatestRevision, outPath)
 	return nil
+}
+
+func parseArgs(args []string) (runOptions, error) {
+	var opts runOptions
+	if len(args) == 0 {
+		return opts, errors.New("missing executable name")
+	}
+
+	var positional []string
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "-zip":
+			opts.zip = true
+		case "--password":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("missing value for --password\nusage: %s [-zip] [--password <password>] <svn-repository-path> <dest>", filepath.Base(args[0]))
+			}
+			if args[i] == "" {
+				return opts, errors.New("--password cannot be empty")
+			}
+			opts.password = args[i]
+			opts.passwordSet = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return opts, fmt.Errorf("unknown option %s\nusage: %s [-zip] [--password <password>] <svn-repository-path> <dest>", arg, filepath.Base(args[0]))
+			}
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 2 {
+		return opts, fmt.Errorf("usage: %s [-zip] [--password <password>] <svn-repository-path> <dest>", filepath.Base(args[0]))
+	}
+	opts.source = positional[0]
+	opts.dest = positional[1]
+	return opts, nil
 }
 
 func zipDir(srcDir, outPath, password string) error {
@@ -86,7 +148,12 @@ func zipDir(srcDir, outPath, password string) error {
 		}
 		rel = filepath.ToSlash(rel)
 
-		w, err := zw.Encrypt(rel, password, azip.StandardEncryption)
+		var w io.Writer
+		if password == "" {
+			w, err = zw.Create(rel)
+		} else {
+			w, err = zw.Encrypt(rel, password, azip.StandardEncryption)
+		}
 		if err != nil {
 			return err
 		}
